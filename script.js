@@ -1,4 +1,14 @@
-// eslint-disable-next-line prettier/prettier
+// ==UserScript==
+// @name         WPlaceBot
+// @namespace    http://tampermonkey.net/
+// @version      2025-08-08.3
+// @description  Bot
+// @author       TH3C0D3R
+// @match        https://wplace.live/*
+// @grant        none
+// @icon
+// ==/UserScript==
+localStorage.removeItem("lp");
 ; (async () => {
   // CONFIGURATION CONSTANTS
   const CONFIG = {
@@ -190,6 +200,27 @@
           'pixel-blink': true,
         },
       },
+      'Acrylic': {
+        primary: '#00000080',
+        secondary: '#00000040',
+        accent: 'rgba(0,0,0,0.75)',
+        text: '#ffffff',
+        highlight: '#ffffff',
+        success: '#00e500',
+        error: '#e50000',
+        warning: '#e5e500',
+        fontFamily: "'Inter', 'Apple Color Emoji'",
+        borderRadius: '10px',
+        borderStyle: 'solid',
+        borderWidth: '0px',
+        boxShadow: 'none',
+        backdropFilter: 'blur(20px)',
+        animations: {
+          glow: false,
+          scanline: false,
+          'pixel-blink': false,
+        },
+      },
     },
     currentTheme: 'Classic Autobot',
     PAINT_UNAVAILABLE: true,
@@ -222,6 +253,7 @@
     document.documentElement.classList.remove(
       'wplace-theme-classic',
       'wplace-theme-classic-light',
+      'wplace-theme-acrylic',
       'wplace-theme-neon'
     );
 
@@ -230,6 +262,8 @@
       themeClass = 'wplace-theme-neon';
     } else if (CONFIG.currentTheme === 'Classic Light') {
       themeClass = 'wplace-theme-classic-light';
+    } else if (CONFIG.currentTheme === 'Acrylic') {
+      themeClass = 'wplace-theme-acrylic';
     }
 
     document.documentElement.classList.add(themeClass);
@@ -1188,7 +1222,7 @@
       throw error;
     }
   }
-  const randStr = (len, chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789') =>
+  const randStr = (len, chars = 'abcdefghijklmnopqrstuvwxyz0123456789') =>
     [...Array(len)].map(() => chars[(crypto?.getRandomValues?.(new Uint32Array(1))[0] % chars.length) || Math.floor(Math.random() * chars.length)]).join('')
   const fpStr32 = randStr(32);
   async function handleCaptchaFallback() {
@@ -2828,7 +2862,7 @@
         var token = await createWasmToken(regionX, regionY, payload);
         const res = await fetch(`https://backend.wplace.live/s0/pixel/${regionX}/${regionY}`, {
           method: 'POST',
-          headers: { 'Content-Type': 'text/plain;charset=UTF-8', "x-pawtect-token":token },
+          headers: { 'Content-Type': 'text/plain;charset=UTF-8', "x-pawtect-token": token },
           credentials: 'include',
           body: JSON.stringify(payload),
         });
@@ -7388,7 +7422,7 @@
       var wasmtoken = await createWasmToken(regionX, regionY, payload);
       const res = await fetch(`https://backend.wplace.live/s0/pixel/${regionX}/${regionY}`, {
         method: 'POST',
-        headers: { 'Content-Type': 'text/plain;charset=UTF-8', "x-pawtect-token":wasmtoken },
+        headers: { 'Content-Type': 'text/plain;charset=UTF-8', "x-pawtect-token": wasmtoken },
         credentials: 'include',
         body: JSON.stringify(payload),
       });
@@ -7413,7 +7447,7 @@
             `https://backend.wplace.live/s0/pixel/${regionX}/${regionY}`,
             {
               method: 'POST',
-              headers: { 'Content-Type': 'text/plain;charset=UTF-8', "x-pawtect-token":wasmtoken },
+              headers: { 'Content-Type': 'text/plain;charset=UTF-8', "x-pawtect-token": wasmtoken },
               credentials: 'include',
               body: JSON.stringify(retryPayload),
             }
@@ -7782,10 +7816,15 @@
   loadThemePreference();
   applyTheme();
 
-  async function createWasmToken(regionX,regionY, payload) {
+  var pawtect_chunk = null;
+
+  //find module if pawtect_chunk is null
+  pawtect_chunk ??= await findTokenModule("pawtect_wasm_bg.wasm");
+
+  async function createWasmToken(regionX, regionY, payload) {
     try {
       // Load the Pawtect module and WASM
-      const mod = await import('/_app/immutable/chunks/BBb1ALhY.js');
+      const mod = await import(new URL('/_app/immutable/chunks/'+pawtect_chunk, location.origin).href);
       let wasm;
       try {
         wasm = await mod._();
@@ -7797,8 +7836,7 @@
       try {
         try {
           const me = await fetch(`https://backend.wplace.live/me`, { credentials: 'include' }).then(r => r.ok ? r.json() : null);
-          if (me?.id) 
-          {
+          if (me?.id) {
             mod.i(me.id);
             console.log('✅ user ID set:', me.id);
           }
@@ -7892,11 +7930,6 @@
       // Display results
       console.log('');
       console.log('🎉 SUCCESS!');
-      console.log('📊 Results:');
-      console.log('   Input coords: [1245984, 1088]');
-      console.log('   Token length:', token?.length || 0);
-      console.log('   Token preview:', token?.substring(0, 50) + '...');
-      console.log('');
       console.log('🔑 Full token:');
       console.log(token);
       return token;
@@ -7904,7 +7937,23 @@
       console.error('❌ Failed to generate fp parameter:', error);
       return null;
     }
-    return null;
+  }
+
+  async function findTokenModule(str) {
+    console.log('🔎 Searching for wasm Module...');
+    const links = Array.from(document.querySelectorAll('link[rel="modulepreload"][href$=".js"]'));
+
+    for (const link of links) {
+      try {
+        const url = new URL(link.getAttribute("href"), location.origin).href;
+        const code = await fetch(url).then(r => r.text());
+        if (code.includes(str)) {
+          console.log('✅ Found wasm Module...');
+          return url.split('/').pop();
+        }
+      } catch { }
+    }
+    console.error(`❌ Could not find Pawtect chunk: `, error);
   }
 
   createUI().then(() => {
